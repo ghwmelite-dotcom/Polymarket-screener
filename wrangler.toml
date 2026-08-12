@@ -1,0 +1,46 @@
+name = "polymarket-screener"
+account_id = "ea2eb3a9813660dfca2a60e594858538"
+main = "src/index.ts"
+compatibility_date = "2026-08-11"
+workers_dev = true
+
+[limits]
+cpu_ms = 300_000
+subrequests = 500
+
+[triggers]
+crons = ["17 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "polymarket-screener"
+database_id = "a69eaaa9-bcf4-446d-882f-c941db4322aa"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "BLACKLIST_KV"
+id = "cc6a37ea1432410cbfa65fc793d915ab"
+
+[[r2_buckets]]
+binding = "RAW_SNAPSHOTS"
+bucket_name = "polymarket-screener-raw"
+
+[[queues.producers]]
+binding = "WALLET_AUDITS"
+queue = "polymarket-wallet-audits"
+
+[[queues.producers]]
+binding = "ALERT_DELIVERY"
+queue = "polymarket-alert-delivery"
+
+[[queues.consumers]]
+queue = "polymarket-wallet-audits"
+max_batch_size = 5
+max_batch_timeout = 5
+max_retries = 3
+
+[[queues.consumers]]
+queue = "polymarket-alert-delivery"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
