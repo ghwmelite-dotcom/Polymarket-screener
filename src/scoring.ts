@@ -1,4 +1,4 @@
-import type { ReplayResult, Trade } from './types';
+import type { ClosedPosition, ReplayResult, Trade } from './types';
 
 export const POLICY_VERSION = 'v1.0.0';
 const STARTING_EQUITY = 1_000;
@@ -8,18 +8,14 @@ const STRESSED_SLIPPAGE = 0.03;
 const MIN_VALID_TRADES = 30;
 const MAX_DRAWDOWN_PCT = 30;
 
-function replay(trades: Trade[], slippage: number): { netPnl: number; maxDrawdownPct: number } {
+function replay(positions: ClosedPosition[], slippage: number): { netPnl: number; maxDrawdownPct: number } {
   let equity = STARTING_EQUITY;
   let peak = equity;
   let maxDrawdown = 0;
-  for (const trade of trades) {
+  for (const position of positions) {
     const riskBudget = Math.min(equity * TARGET_POSITION_FRACTION, 150);
-    const fillPrice = trade.side === 'BUY' ? Math.min(0.999, trade.price * (1 + slippage)) : Math.max(0.001, trade.price * (1 - slippage));
-    const notional = Math.min(riskBudget, trade.size * fillPrice);
-    // A public trade stream does not supply a later executable exit price. This is deliberately
-    // a conservative mark-normalized replay, not a claim to reconstruct wallet P&L.
-    const edge = trade.side === 'BUY' ? (trade.price - fillPrice) / fillPrice : (fillPrice - trade.price) / fillPrice;
-    equity += notional * edge;
+    const normalizedReturn = position.realizedPnl / position.totalBought;
+    equity += riskBudget * normalizedReturn - riskBudget * slippage;
     peak = Math.max(peak, equity);
     maxDrawdown = Math.max(maxDrawdown, ((peak - equity) / peak) * 100);
   }
@@ -50,12 +46,12 @@ export function adverseScalingScore(trades: Trade[]): number {
   return score;
 }
 
-export function scoreWallet(observedCount: number, trades: Trade[]): ReplayResult {
+export function scoreWallet(observedCount: number, trades: Trade[], positions: ClosedPosition[]): ReplayResult {
   const reasons: string[] = [];
-  const base = replay(trades, BASE_SLIPPAGE);
-  const stressed = replay(trades, STRESSED_SLIPPAGE);
+  const base = replay(positions, BASE_SLIPPAGE);
+  const stressed = replay(positions, STRESSED_SLIPPAGE);
   const adverseScaling = adverseScalingScore(trades);
-  if (trades.length < MIN_VALID_TRADES) reasons.push(`insufficient valid trades: ${trades.length}/${MIN_VALID_TRADES}`);
+  if (positions.length < MIN_VALID_TRADES) reasons.push(`insufficient closed positions: ${positions.length}/${MIN_VALID_TRADES}`);
   if (base.netPnl <= 0) reasons.push('base replay is not positive');
   if (stressed.netPnl <= 0) reasons.push('stressed replay is not positive');
   if (base.maxDrawdownPct >= MAX_DRAWDOWN_PCT) reasons.push(`drawdown exceeds ${MAX_DRAWDOWN_PCT}%`);

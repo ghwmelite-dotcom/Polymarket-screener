@@ -1,4 +1,4 @@
-import type { Trade } from './types';
+import type { ClosedPosition, Trade } from './types';
 
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const CONDITION = /^0x[a-fA-F0-9]{64}$/;
@@ -43,6 +43,17 @@ export function parseTrades(input: unknown, wallet: string): Trade[] {
     });
   }
   return parsed.sort((a, b) => a.timestamp - b.timestamp || a.conditionId.localeCompare(b.conditionId));
+}
+
+export function parseClosedPositions(input: unknown, wallet: string): ClosedPosition[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((row): ClosedPosition[] => {
+    if (typeof row !== 'object' || row === null) return [];
+    const item = row as Record<string, unknown>;
+    const proxyWallet = normalizeWallet(item.proxyWallet);
+    if (proxyWallet !== wallet || typeof item.totalBought !== 'number' || item.totalBought <= 0 || !Number.isFinite(item.totalBought) || typeof item.realizedPnl !== 'number' || !Number.isFinite(item.realizedPnl) || typeof item.timestamp !== 'number' || !Number.isSafeInteger(item.timestamp)) return [];
+    return [{ proxyWallet, totalBought: item.totalBought, realizedPnl: item.realizedPnl, timestamp: item.timestamp }];
+  }).sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export function leaderboardWallets(input: unknown, limit: number): string[] {

@@ -32,6 +32,13 @@ export interface Trade {
   title?: string;
 }
 
+export interface ClosedPosition {
+  proxyWallet: string;
+  totalBought: number;
+  realizedPnl: number;
+  timestamp: number;
+}
+
 export interface ReplayResult {
   observedCount: number;
   validCount: number;

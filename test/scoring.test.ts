@@ -13,8 +13,8 @@ describe('risk scoring', () => {
   });
 
   it('does not qualify an undersampled history', () => {
-    const result = scoreWallet(2, [trade(1), trade(2)]);
+    const result = scoreWallet(2, [trade(1), trade(2)], []);
     expect(result.qualifies).toBe(false);
-    expect(result.reasons.some((reason) => reason.startsWith('insufficient valid trades'))).toBe(true);
+    expect(result.reasons.some((reason) => reason.startsWith('insufficient closed positions'))).toBe(true);
   });
 });

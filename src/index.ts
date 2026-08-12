@@ -1,6 +1,6 @@
 import { POLICY_VERSION, scoreWallet } from './scoring';
 import type { AlertDeliveryMessage, Env, WalletAuditMessage } from './types';
-import { leaderboardWallets, parseTrades } from './validation';
+import { leaderboardWallets, parseClosedPositions, parseTrades } from './validation';
 
 const DATA_API = 'https://data-api.polymarket.com';
 const MAX_CANDIDATES = 50;
@@ -25,6 +25,7 @@ async function fetchJson(url: string): Promise<unknown> {
 
 async function auditWallet(env: Env, message: WalletAuditMessage): Promise<void> {
   const pages: unknown[] = [];
+  const closedPages: unknown[] = [];
   for (let offset = 0; offset < MAX_TRADE_PAGES * PAGE_SIZE; offset += PAGE_SIZE) {
     const url = new URL(`${DATA_API}/trades`);
     url.searchParams.set('user', message.walletAddress);
@@ -34,12 +35,23 @@ async function auditWallet(env: Env, message: WalletAuditMessage): Promise<void>
     pages.push(page);
     if (!Array.isArray(page) || page.length < PAGE_SIZE) break;
   }
-  const rawPayload = JSON.stringify(pages);
+  for (let offset = 0; offset < MAX_TRADE_PAGES * 50; offset += 50) {
+    const url = new URL(`${DATA_API}/closed-positions`);
+    url.searchParams.set('user', message.walletAddress);
+    url.searchParams.set('limit', '50');
+    url.searchParams.set('offset', String(offset));
+    url.searchParams.set('sortBy', 'TIMESTAMP');
+    url.searchParams.set('sortDirection', 'ASC');
+    const page = await fetchJson(url.toString());
+    closedPages.push(page);
+    if (!Array.isArray(page) || page.length < 50) break;
+  }
+  const rawPayload = JSON.stringify({ trades: pages, closedPositions: closedPages });
   const sourceHash = await hash(rawPayload);
   const snapshotKey = `trades/${message.walletAddress}/${Date.now()}-${sourceHash}.json`;
   await env.RAW_SNAPSHOTS.put(snapshotKey, rawPayload, { httpMetadata: { contentType: 'application/json' }, customMetadata: { source: 'data-api/trades', policyVersion: POLICY_VERSION } });
   const observed = pages.flatMap((page) => Array.isArray(page) ? page : []);
-  const result = scoreWallet(observed.length, parseTrades(observed, message.walletAddress));
+  const result = scoreWallet(observed.length, parseTrades(observed, message.walletAddress), parseClosedPositions(closedPages.flatMap((page) => Array.isArray(page) ? page : []), message.walletAddress));
   const auditId = id();
   const now = isoNow();
   const qualification = result.qualifies ? 'qualified' : result.validCount === 0 ? 'inconclusive' : 'rejected';
